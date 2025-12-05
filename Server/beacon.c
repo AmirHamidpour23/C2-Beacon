@@ -6,13 +6,15 @@
 #include <string.h>
 #include <tlhelp32.h>
 #include <iphlpapi.h>
-#include <winternl.h>  // Add this for NT_SUCCESS
+#include <winternl.h>
 #include <shlobj.h>
+#include <psapi.h>  // Add this for process functions
 
 #pragma comment(lib, "iphlpapi.lib")
 #pragma comment(lib, "ws2_32.lib")
 #pragma comment(lib, "gdi32.lib")
 #pragma comment(lib, "shell32.lib")
+#pragma comment(lib, "advapi32.lib") 
 
 char* get_system_info();
 char* get_process_list();
