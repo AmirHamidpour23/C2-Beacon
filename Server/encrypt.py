@@ -1,73 +1,88 @@
-import json 
+import json
 import base64
-from cryptography.fernet import Fernet
-from cryptography.hazmat.primitives import hashes 
-from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
+class RC4Cipher:
+    """RC4 Encryption/Decryption (same operation for both)"""
+    def __init__(self, key: str):
+        self.key = key.encode('utf-8')
+        self.S = list(range(256))
+        self._key_schedule()
+    
+    def _key_schedule(self):
+        """RC4 Key Scheduling Algorithm"""
+        j = 0
+        key_len = len(self.key)
+        for i in range(256):
+            j = (j + self.S[i] + self.key[i % key_len]) % 256
+            self.S[i], self.S[j] = self.S[j], self.S[i]
+    
+    def crypt(self, data: bytes) -> bytes:
+        """Encrypt or decrypt data (RC4 is symmetrical)"""
+        S = self.S.copy()
+        i = j = 0
+        result = bytearray()
+        
+        for byte in data:
+            i = (i + 1) % 256
+            j = (j + S[i]) % 256
+            S[i], S[j] = S[j], S[i]
+            k = S[(S[i] + S[j]) % 256]
+            result.append(byte ^ k)
+        
+        return bytes(result)
 
 class EncryptedCommunicator:
     def __init__(self, password: str):
-        #kdf is getting used here as a password strengthener 
-        #the password is later on going to get used as the encryption end decryption key
-        kdf = PBKDF2HMAC(  
-          algorithm=hashes.SHA256(),
-          length=32, #the 32 bytes length (256 bits) is for AES-256 but the crypto library will only take the first 16 bytes
-          salt=b'the_salt', #random salt for added security
-          iterations=100000, #something to stop brute-forceing
-                              #it's just saying how many times we are doing the scrambling process 
-        )
-
-        #this is where the password becomes the key for the fernet AES-128 encryption
-        key = base64.urlsafe_b64encode(kdf.derive(password.encode()))
-        self.cipher_suite = Fernet(key)
-
-#essentially up until here the process is, password -> key, the process the key goes through is:
-    #key "TheKey123" -> bytes -> sha256 & salt x100000 -> base64 encoded -> saved as key for AES-128
-
-    def EncryptMessage(self, data: dict): 
-    #this function is encrypting the message from a python dict -> json -> bytes -> AES
-        JsonData = json.dumps(data).encode() #dictionary -> Json string -> bytes
-        encrypted_data = self.cipher_suite.encrypt(JsonData) # bytes -> Fernet which is AES-128-CBC
-
-        return encrypted_data
-
-    def DecryptMessage(self, encrypted_data: bytes):
-        #this fuction is taking the AES-128 encrypted bytes that we got from "EncryptMessage"
-        #and turns them back to python dict. Pretty much the reverse of EncryptMessage
-
-        decrypted_bytes = self.cipher_suite.decrypt(encrypted_data) # AES encrypted bytes -> bytes
-
-        decrypted_data = json.loads(decrypted_bytes.decode()) # bytes -> json string -> python dict
-
-        return decrypted_data
+        """Initialize with password (used as encryption key)"""
+        self.cipher = RC4Cipher(password)
     
-def test():
-    print('testing encryption')
-
-    com = EncryptedCommunicator("Mr.robot")
-
-    command = {
-        "command": "get_sys_info",
-        "task_id": "12345",
-        "arg": []
-    }
-
-    print("original command:  {command}")
-
-    encrypted = com.EncryptMessage(command)
-    print(f"encrypted data: {encrypted}")
-    print (f"length: {len(encrypted)} in bytes")
-
-    decrypted = com.DecryptMessage(encrypted)
-    print(f"encrypted data: {decrypted}")
-
-    if command == decrypted:
-        print ("SUCESS YOU BASTARD")
-
-    else:
-        print("FAILURE KYS")
-
-        return command == decrypted
+    def EncryptMessage(self, data: dict) -> bytes:
+        """
+        Encrypt a Python dictionary to bytes
+        Steps: Dict → JSON → Bytes → RC4 → Base64
+        """
+        # Convert dict to JSON string, then to bytes
+        json_str = json.dumps(data)
+        json_bytes = json_str.encode('utf-8')
         
+        # Encrypt with RC4
+        encrypted = self.cipher.crypt(json_bytes)
+        
+        # Encode to base64 for safe transmission
+        return base64.b64encode(encrypted)
+    
+    def DecryptMessage(self, encrypted_data: bytes) -> dict:
+        """
+        Decrypt bytes back to Python dictionary
+        Steps: Base64 → RC4 → Bytes → JSON → Dict
+        """
+        # Decode from base64
+        encrypted = base64.b64decode(encrypted_data)
+        
+        # Decrypt with RC4 (same as encrypt)
+        decrypted = self.cipher.crypt(encrypted)
+        
+        # Convert bytes to string, then parse JSON
+        json_str = decrypted.decode('utf-8')
+        return json.loads(json_str)
+
+# Test function
 if __name__ == "__main__":
-    test()
+    # Test the encryption
+    comm = EncryptedCommunicator("Mr.Robot")
+    
+    test_data = {"command": "whoami", "type": "system"}
+    
+    print("Testing RC4 Encryption:")
+    print(f"Original: {test_data}")
+    
+    encrypted = comm.EncryptMessage(test_data)
+    print(f"Encrypted (base64): {encrypted}")
+    
+    decrypted = comm.DecryptMessage(encrypted)
+    print(f"Decrypted: {decrypted}")
+    
+    if test_data == decrypted:
+        print("✅ Encryption/Decryption successful!")
+    else:
+        print("❌ Failed!")
