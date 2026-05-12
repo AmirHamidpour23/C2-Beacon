@@ -1,4 +1,5 @@
-OUR ONLY DELIVERABLES ARE C2_Beacon.py, encrypt.py and beacon.c
+OUR ONLY DELIVERABLES ARE C2_Beacon.py, encrypt.py and beacon.c. Any other files were used for testing or 
+deprecated versions that were used for referenceing
 
 As a final project for Reverse Malware Engineering (CSC-4820), we created Project Aegis. It is a custom C2 
 framework developed by the mock Cybershield Solutions Threat Intelligence Team in order to simulate an experience
